@@ -5,7 +5,6 @@ import (
     "fmt"
     "net/http"
     "encoding/json"
-    "strings"
     "strconv"
 
     "github.com/gorilla/mux"
@@ -44,13 +43,8 @@ func newTransaction(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     var amount string
     var source, recipient int
+    var err error
     params := mux.Vars(r)
-    source, err := strconv.Atoi(strings.Split(apiPort, ":")[1])
-    if err != nil {
-        js, _ := convertToJson([]string{"Failed to parse request parameters."})
-        w.Write(js)
-        return
-    }
     if val_amount, valid := params["amount"]; valid {
         amount = val_amount
     }
@@ -62,12 +56,15 @@ func newTransaction(w http.ResponseWriter, r *http.Request) {
             return
         }
     }
-    var block Block
-    block, err = generateBlock(source, recipient, amount)
-    if err != nil {
-        log.Print("Error found")
+    if val_source, valid := params["src"]; valid {
+        source, err = strconv.Atoi(val_source)
+        if err != nil {
+            js, _ := convertToJson([]string{"Failed to parse request parameters."})
+            w.Write(js)
+            return
+        }
     }
-    log.Print(block)
+    generateTransaction(source, recipient, amount)
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +82,7 @@ func NodeApi(port string) {
     apiPort = port
     r := mux.NewRouter()
     r.HandleFunc("/", home).Methods(http.MethodGet)
-    r.HandleFunc("/new_transaction/amount/{amount}/recipient/{target}", newTransaction).Methods(http.MethodPost)
+    r.HandleFunc("/new_transaction/amount/{amount}/source/{src}/recipient/{target}", newTransaction).Methods(http.MethodPost)
     r.HandleFunc("/get_chain", getChain).Methods(http.MethodGet)
     r.HandleFunc("/update_chain", updateChain).Methods(http.MethodGet)
 

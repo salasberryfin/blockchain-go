@@ -47,6 +47,17 @@ func manageNode(w http.ResponseWriter, r *http.Request) {
     }
 
     if oper == "add" {
+        for i := 0; i < len(Nodes); i++ {
+            if Nodes[i] == api_url {
+                resp := []string{"Node is already in the list."}
+                js, err := convertToJson(resp)
+                if err != nil {
+                    http.Error(w, err.Error(), http.StatusInternalServerError)
+                }
+                w.Write(js)
+                return
+            }
+        }
         Nodes = append(Nodes, api_url)
         resp := []string{"Adding node: " + api_url}
         js, err := convertToJson(resp)
