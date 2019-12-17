@@ -1,21 +1,23 @@
 package main
 
 import (
+    "os"
     "fmt"
     "log"
     "crypto/sha256"
     "io/ioutil"
     "time"
     "strings"
+    "strconv"
     "net/http"
     "encoding/hex"
     "encoding/json"
+    "errors"
 )
 
-const node_api_port string = ":5000"
-const node_api_url string = "localhost" + node_api_port
-const main_api string = "http://localhost:8080/get_nodes"
-var Nodes = []string{}
+var nodeApiUrl string = "localhost"
+const mainApi string = "http://localhost:8080/get_nodes"
+var Nodes []string
 
 type Block struct {
     Timestamp       int64           `json:"Timestamp"`
@@ -40,7 +42,7 @@ func getSha256 (unhashed string) string {
     return hex.EncodeToString(hashed.Sum(nil))
 }
 
-func validateBlock() bool {
+func validateBlock(block Block) bool {
 
     return true
 }
@@ -57,28 +59,45 @@ func getPreviousBlock() Block {
     return Block{}
 }
 
-func generateBlock (transaction Transaction) Block {
-    block := Block{}
+func generateTransaction (src, rec int, amt string) Transaction {
+    var transaction Transaction
+    transaction.Source = src
+    transaction.Recipient = rec
+    transaction.Amount = amt
+
+    return transaction
+}
+
+func generateBlock (src, rec int, amt string) (Block, error) {
+    var block Block
+    var transaction Transaction
+    transaction = generateTransaction(src, rec, amt)
     timestamp := time.Now().Unix()
-    block.Proof = "something"
+    block.Proof = "proof-tbd"
     block.Timestamp = timestamp
     block.PreviousHash = getSha256(fmt.Sprintf("%v", getPreviousBlock()))
     block.Transaction = transaction
+    if validateBlock(block) {
+        addToChain(block)
+        return block, nil
+    }
 
-    return block
+    return Block{}, errors.New("Block was not properly validated.")
 }
-
 
 func checkForLongerChain() ([]string) {
     nodesString, err := retrieveNodes()
-    Nodes = strings.Split(nodesString, ",")
     if err != nil {
         log.Fatal(err)
     }
+    if len(nodesString) == 0 {
+        return []string{"[Error] No nodes are part of the network."}
+    }
+    Nodes = strings.Split(nodesString, ",")
     for i := 0; i < len(Nodes); i++ {
-        u := Nodes[i]
-        u = u[1:len(u)-1]
-        if u == node_api_url {
+        var newBlockchain []Block
+        u := Nodes[i][1:len(Nodes[i]) - 1]
+        if u == nodeApiUrl {
             log.Print("Avoiding sending a request to ourselves.")
             continue
         }
@@ -90,11 +109,9 @@ func checkForLongerChain() ([]string) {
         }
         defer r.Body.Close()
         responseData, err := ioutil.ReadAll(r.Body)
-        var newBlockchain []Block
         json.Unmarshal(responseData, &newBlockchain)
         fmt.Printf("Parsed JSON Response: %v", newBlockchain)
         if len(blockchain) < len(newBlockchain) {
-            log.Print("Retrieved blockchain is longer.")
             blockchain = newBlockchain
         }
     }
@@ -119,14 +136,14 @@ func getCurrentChain() (string) {
 }
 
 func retrieveNodes() (string, error) {
-    r, err := http.Get(main_api)
+    r, err := http.Get(mainApi)
     if err != nil {
         return "", err
     }
     defer r.Body.Close()
     responseData, err := ioutil.ReadAll(r.Body)
     if err != nil {
-        log.Fatal(err)
+        return "", err
     }
     responseString := strings.Trim(string(responseData), "[]")
 
@@ -134,13 +151,22 @@ func retrieveNodes() (string, error) {
 }
 
 func main() {
-    transaction := Transaction{0, 0, "Genesis"}
-    new_block := generateBlock(transaction)
-    addToChain(new_block)
-    transaction2 := Transaction{1, 1, "Second"}
-    new_block2 := generateBlock(transaction2)
-    addToChain(new_block2)
-    log.Printf("Node API is running - port: %v", strings.Trim(node_api_port, ":"))
-    NodeApi(node_api_port)
+    portArg := os.Args[1:]
+    nodeApiPort, err := strconv.Atoi(portArg[0])
+    if err != nil {
+        log.Fatal("Wrong input arguments.")
+    }
+    nodeApiUrl += ":" + strconv.Itoa(nodeApiPort)
+    _, err = generateBlock(0, 0, "Genesis")
+    if err != nil {
+        log.Print("An error occured when generating a random block.")
+    }
+    _, err = generateBlock(1, 1, "Second")
+    if err != nil {
+        log.Print("An error occured when generating a random2 block.")
+    }
+    log.Printf("Node API is running - port: %v", nodeApiPort)
+    proofOfWork()
+    NodeApi(":" + strconv.Itoa(nodeApiPort))
 }
 
