@@ -10,6 +10,20 @@ import (
     "bytes"
 )
 
+type Block struct {
+    Timestamp       int64           `json:"Timestamp"`
+    Miner           int             `json:"Miner"`
+    Proof           int             `json:"Proof"`
+    PreviousHash    string          `json:"PreviousHash"`
+    Transaction     Transaction     `json:"Transaction"`
+}
+
+type Transaction struct {
+    Source      int
+    Recipient   int
+    Amount      string
+}
+
 func initNode (nodeUrl, mainUrl string) {
     registerUrl := fmt.Sprintf("%v/manage_node/operation/add/%v", mainUrl, nodeUrl)
     requestBody := []byte{}

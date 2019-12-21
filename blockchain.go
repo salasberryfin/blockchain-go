@@ -16,24 +16,10 @@ import (
     "bytes"
 )
 
-var nodeApiUrl string = "localhost"
+var nodeApiURL string = "localhost"
 const mainApi string = "http://localhost:8080"
+
 var Nodes []string
-
-type Block struct {
-    Timestamp       int64           `json:"Timestamp"`
-    Miner           int             `json:"Miner"`
-    Proof           int             `json:"Proof"`
-    PreviousHash    string          `json:"PreviousHash"`
-    Transaction     Transaction     `json:"Transaction"`
-}
-
-type Transaction struct {
-    Source      int
-    Recipient   int
-    Amount      string
-}
-
 var blockchain []Block;
 
 func getSha256 (unhashed string) string {
@@ -58,10 +44,6 @@ func validateBlock(block Block) bool {
     return true
 }
 
-func addToChain(block Block) {
-    blockchain = append(blockchain, block)
-}
-
 func getPreviousBlock() Block {
     if len(blockchain) > 0 {
         return blockchain[len(blockchain)-1]
@@ -73,7 +55,7 @@ func getPreviousBlock() Block {
 func generateTransaction (src, rec int, amt string) Transaction {
     var transaction Transaction
     var nodePort int
-    nodePort, _ = strconv.Atoi(strings.Split(nodeApiUrl, ":")[1])
+    nodePort, _ = strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
     if src == nodePort {
         broadcastTransaction(src, rec, amt)
     }
@@ -89,7 +71,7 @@ func generateBlock (transaction Transaction) (Block, error) {
     var block Block
     var proofValue int
     var nodePort int
-    nodePort, _ = strconv.Atoi(strings.Split(nodeApiUrl, ":")[1])
+    nodePort, _ = strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
     timestamp := time.Now().Unix()
     block.Miner = nodePort
     block.Timestamp = timestamp
@@ -98,7 +80,7 @@ func generateBlock (transaction Transaction) (Block, error) {
     proofValue = proofOfWork()
     block.Proof = proofValue
     if validateBlock(block) {
-        addToChain(block)
+        blockchain = append(blockchain, block)
         updateChainForAllNodes()
         return block, nil
     }
@@ -110,10 +92,6 @@ func broadcastTransaction (src, rec int, amt string) {
     var u string
     for i := 0; i < len(Nodes); i++ {
         u = Nodes[i][1:len(Nodes[i]) - 1]
-        if u == nodeApiUrl {
-            log.Print("Avoiding sending a request to ourselves.")
-            continue
-        }
         transactionUrl := fmt.Sprintf("http://%v/new_transaction/amount/%v/source/%v/recipient/%v", u, amt, src, rec)
         requestBody := []byte{}
         log.Print("Broadcasting transaction: ", transactionUrl)
@@ -130,10 +108,6 @@ func updateChainForAllNodes () {
     for i := 0; i < len(Nodes); i++ {
         log.Print("Updating: ", Nodes[i])
         u = Nodes[i][1:len(Nodes[i]) - 1]
-        if u == nodeApiUrl {
-            log.Print("Avoiding sending a request to ourselves.")
-            continue
-        }
         _, err := http.Get("http://" + u + "/update_chain")
         if err != nil {
             log.Print("[Error]: an error was encountered when updating the chain.")
@@ -142,21 +116,15 @@ func updateChainForAllNodes () {
 }
 
 func checkForLongerChain() ([]string) {
-    nodesString, err := retrieveNodes()
+    nodesSlice, err := retrieveNodes()
     if err != nil {
-        log.Fatal(err)
+        log.Print("[Error]: Error when retrieving the current node network.")
+        return []string{"An error was encountered when updating the nodes list %v"}
     }
-    if len(nodesString) == 0 {
-        return []string{"[Error] No nodes are part of the network."}
-    }
-    Nodes = strings.Split(nodesString, ",")
+    Nodes = nodesSlice
     for i := 0; i < len(Nodes); i++ {
         var newBlockchain []Block
         u := Nodes[i][1:len(Nodes[i]) - 1]
-        if u == nodeApiUrl {
-            log.Print("Avoiding sending a request to ourselves.")
-            continue
-        }
         log.Print("Sending request to: ", u)
         r, err := http.Get("http://" + u + "/get_chain")
         if err != nil {
@@ -191,19 +159,30 @@ func getCurrentChain() (string) {
     return resp
 }
 
-func retrieveNodes() (string, error) {
+func retrieveNodes() ([]string, error) {
     r, err := http.Get(mainApi + "/get_nodes")
     if err != nil {
-        return "", err
+        return []string{}, err
     }
     defer r.Body.Close()
     responseData, err := ioutil.ReadAll(r.Body)
     if err != nil {
-        return "", err
+        return []string{}, err
     }
-    responseString := strings.Trim(string(responseData), "[]")
+    nodesString := strings.Trim(string(responseData), "[]")
+    if len(nodesString) == 0 {
+        return []string{}, nil
+    }
+    nodesSlice := strings.Split(nodesString, ",")
+    for i := 0; i < len(nodesSlice); i++ {
+        u := nodesSlice[i][1:len(nodesSlice[i]) - 1]
+        if u == nodeApiURL {
+            nodesSlice[i] = nodesSlice[len(nodesSlice) - 1]
+            nodesSlice = nodesSlice[:len(nodesSlice) - 1]
+        }
+    }
 
-    return responseString, nil
+    return nodesSlice, nil
 }
 
 func main() {
@@ -212,8 +191,8 @@ func main() {
     if err != nil {
         log.Fatal("Wrong input arguments.")
     }
-    nodeApiUrl += ":" + strconv.Itoa(nodeApiPort)
-    initNode(nodeApiUrl, mainApi)
+    nodeApiURL += ":" + strconv.Itoa(nodeApiPort)
+    initNode(nodeApiURL, mainApi)
     initApi(nodeApiPort)
 }
 
