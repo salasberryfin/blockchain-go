@@ -12,12 +12,12 @@ const periodicity time.Duration = 10000
 
 func CheckForInactiveNodes(nodes *[]string) {
     for {
-        for i, v := range *nodes {
+        for _, v := range *nodes {
             _, err := http.Get("http://" + v)
             if err != nil {
                 log.Printf("Node %v is not responding -> removing from network!", v)
-                (*nodes)[i] = (*nodes)[len(*nodes) - 1]
-                (*nodes) = (*nodes)[:len(*nodes) - 1]
+                newNodes, _ := RemoveNode(*nodes, v)
+                (*nodes) = newNodes
                 continue
             }
             log.Printf("Node %v is alive.", v)

@@ -54,8 +54,13 @@ func getPreviousBlock() Block {
 
 func generateTransaction (src, rec int, amt string) Transaction {
     var transaction Transaction
-    var nodePort int
-    nodePort, _ = strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
+    nodesSlice, err := retrieveNodes()
+    if err != nil {
+        log.Print("[Error]: Error when retrieving the current node network.")
+        return Transaction{}
+    }
+    Nodes = nodesSlice
+    nodePort, _ := strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
     if src == nodePort {
         broadcastTransaction(src, rec, amt)
     }
@@ -69,15 +74,13 @@ func generateTransaction (src, rec int, amt string) Transaction {
 
 func generateBlock (transaction Transaction) (Block, error) {
     var block Block
-    var proofValue int
-    var nodePort int
-    nodePort, _ = strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
+    nodePort, _ := strconv.Atoi(strings.Split(nodeApiURL, ":")[1])
     timestamp := time.Now().Unix()
     block.Miner = nodePort
     block.Timestamp = timestamp
     block.PreviousHash = getSha256(fmt.Sprintf("%v", getPreviousBlock()))
     block.Transaction = transaction
-    proofValue = proofOfWork()
+    proofValue := proofOfWork()
     block.Proof = proofValue
     if validateBlock(block) {
         blockchain = append(blockchain, block)
